@@ -1,0 +1,221 @@
+# Use absolute paths for global roots. Adjust per-machine as needed.
+
+global:
+  # Base directory where raw datasets live on this machine (absolute path)
+  data_root: "/data"
+  
+  # ============================================================================
+  # Dataset Paths
+  # ============================================================================
+  
+  # Multi-news Summarization dataset (English)
+  multinews: "/data/mds/multinews"
+
+  # Multi-X-Science Summarization dataset (English)
+  multixscience: "/data/mds/multixscience"
+
+  # VN-MDS summarization dataset (Vietnamese)
+  vnmds: "/data/mds/vnmds"
+
+  # ViMs summarization dataset (Vietnamese)
+  vims: "/data/mds/vims"
+
+output_root: "/data/moa/outputs/"
+
+# ============================================================================
+# Workspace Paths (relative to project root)
+# ============================================================================
+workspace:
+  # Processed datasets
+  processed_data: "/data/moa/processed/"
+  cache_root: "/data/moa/processed/.cache/"
+  multinews_processed: "/data/moa/processed/multinews/"
+  multixscience_processed: "/data/moa/processed/multixscience/"
+  vnmds_processed: "/data/moa/processed/vnmds/"
+  vims_processed: "/data/moa/processed/vims/"
+
+  # Outputs
+  outputs: "/data/moa/outputs/"
+  checkpoints: "/data/moa/outputs/checkpoints/"
+  results: "/data/moa/outputs/results/"
+  case_studies: "/data/moa/outputs/case_studies/"
+  
+  # Logs (organized by date)
+  logs: "logs/"
+
+# ============================================================================
+# Dataset Configuration
+# ============================================================================
+datasets:
+  # --------------------------------------------------------------------------
+  # Multi-News Configuration
+  # --------------------------------------------------------------------------
+  multi_news:
+    name: "Multi-News"
+    key: "multi_news"
+    task: "multi_document_summarization"
+    domain: "news"
+    language: "en"
+    split: "test"
+
+    test_samples: 5622
+    avg_num_references: 2.79
+    avg_document_length_words: 2103.49
+    avg_summary_length_words: 263.66
+
+    data_schema:
+      sample_id_field: "sample_id"
+      documents_field: "documents"
+      reference_summary_field: "summary"
+
+  # --------------------------------------------------------------------------
+  # Multi-XScience Configuration
+  # --------------------------------------------------------------------------
+  multi_xscience:
+    name: "Multi-XScience"
+    key: "multi_xscience"
+    task: "multi_document_summarization"
+    domain: "scientific_papers"
+    language: "en"
+    split: "test"
+
+    test_samples: 5093
+    avg_num_references: 4.42
+    avg_document_length_words: 778.08
+    avg_summary_length_words: 116.44
+
+    data_schema:
+      sample_id_field: "sample_id"
+      documents_field: "documents"
+      reference_summary_field: "summary"
+
+  # --------------------------------------------------------------------------
+  # VN-MDS Configuration
+  # --------------------------------------------------------------------------
+  vn_mds:
+    name: "VN-MDS"
+    key: "vn_mds"
+    task: "multi_document_summarization"
+    domain: "news"
+    language: "vi"
+    split: "test"
+
+    test_samples: 29
+    avg_num_references: 3.14
+    avg_document_length_words: 419.0
+    avg_summary_length_words: 172.1
+
+    data_schema:
+      sample_id_field: "sample_id"
+      documents_field: "documents"
+      reference_summary_field: "summary"
+
+  # --------------------------------------------------------------------------
+  # ViMs Configuration
+  # --------------------------------------------------------------------------
+  vims:
+    name: "ViMs"
+    key: "vims"
+    task: "multi_document_summarization"
+    domain: "diverse_documents"
+    language: "vi"
+    split: "test"
+
+    test_samples: 45
+    avg_num_references: 6.56
+    avg_document_length_words: 470.2
+    avg_summary_length_words: 231.2
+
+    data_schema:
+      sample_id_field: "sample_id"
+      documents_field: "documents"
+      reference_summary_field: "summary"
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  task: "multi_document_summarization"
+
+  # Primary metrics used for main paper results
+  primary_metrics:
+    - rouge1_f1
+    - rouge2_f1
+    - rougeL_f1
+
+  rouge:
+    score_type: "f1"
+    report_as_percentage: true
+
+    # Language-aware tokenizer can be implemented in code.
+    # English datasets may use standard ROUGE tokenization.
+    # Vietnamese datasets should use the same preprocessing/tokenization used in the paper.
+    tokenizer:
+      en: "default"
+      vi: "vietnamese_aware"
+
+  # Optional analysis metrics for appendix / case study analysis
+  analysis_metrics:
+    kg_metrics:
+      enabled: true
+      metrics:
+        - num_entities
+        - num_relations
+        - num_communities
+        - modularity
+        - kg_noise_score
+
+    cost_metrics:
+      enabled: true
+      metrics:
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - estimated_cost_usd
+        - avg_cost_per_sample
+
+    runtime_metrics:
+      enabled: true
+      metrics:
+        - runtime_seconds
+        - avg_runtime_seconds_per_sample
+
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+outputs:
+  root_dir: "outputs"
+
+  save_case_studies: true
+  save_agent_logs: true
+  save_metadata: true
+  save_final_summary: true
+  save_reference_summary: true
+
+  case_study_structure:
+    agent_log_file: "agent_log.json"
+    metadata_file: "metadata.json"
+    final_summary_file: "final_summary.txt"
+    reference_summary_file: "reference_summary.txt"
+    knowledge_graph_file: "knowledge_graph.json"
+
+  dataset_level_files:
+    metrics_file: "metrics.json"
+    metadata_file: "metadata.json"
+
+
+# ============================================================================
+# Run Configuration
+# ============================================================================
+run:
+  seed: 42
+  num_runs: 3
+
+  # Used for debugging.
+  # Can be overridden from CLI or shell scripts.
+  num_samples: null
+
+  resume: true
+  skip_existing: true
+  continue_on_error: true

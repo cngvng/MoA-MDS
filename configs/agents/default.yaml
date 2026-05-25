@@ -1,0 +1,80 @@
+# Default release agent configuration for the paper-aligned MoA path.
+
+llm:
+  provider: "openai_compatible"
+  model_id: "gpt-5-nano"
+  base_url:
+  api_key_env: "OPENAI_API_KEY"
+  generation:
+    temperature:
+    top_p:
+    max_tokens: 512
+    max_tokens_param: "max_completion_tokens"
+    reasoning_effort: "minimal"
+    timeout: 120
+
+agents:
+  enabled:
+    extractor: true
+    kgsum: true
+    abstractor: true
+    amf: true
+  execution_order:
+    - extractor
+    - kgsum
+    - abstractor
+    - amf
+
+method:
+  extractor:
+    enabled: true
+    output_key: "r_ext"
+    metadata_key: "M_ext"
+    model_name: "lexical_centroid"
+    max_length: 4096
+    lambda: 0.7
+    top_sentence_proportion: 0.15
+    redundancy_threshold: 0.9
+    min_sentences: 3
+    max_sentences: 12
+
+  kgsum:
+    enabled: true
+    output_key: "r_kg"
+    metadata_key: "M_kg"
+    prompt_ids:
+      entity_extraction: "Pi_e"
+      relation_extraction: "Pi_rel"
+      community_summary: "Pi_s"
+      meta_aware_fusion: "Pi_f"
+    spacy_model:
+    entity_similarity_threshold: 0.85
+    relation_confidence_threshold: 0.6
+    community_algorithm: "leiden"
+    top_k_communities: 5
+    min_community_size: 3
+    max_cluster_size: 50
+    leiden_resolution: 1.0
+    max_input_chars: 6000
+    max_summary_tokens: 1024
+
+  abstractor:
+    enabled: true
+    output_key: "r_abs"
+    metadata_key: "M_abs"
+    prompt_ids:
+      initial_generation: "Pi_init"
+      refinement: "Pi_ref"
+    max_refinement_iterations: 2
+    quality_threshold: 0.7
+    max_input_chars: 8000
+    max_summary_tokens: 1024
+
+  amf:
+    enabled: true
+    output_key: "S_MoA"
+    metadata_key: "M_AMF"
+    prompt_id: "Pi_AMF"
+    dominant_weight_threshold: 0.5
+    dominant_quality_threshold: 0.7
+    max_summary_tokens: 1024

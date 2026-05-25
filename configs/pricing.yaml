@@ -1,0 +1,17 @@
+currency: "USD"
+unit: "per_1m_tokens"
+
+models:
+  gpt-5-nano:
+    input_per_1m: 0.05
+    cached_input_per_1m: 0.005
+    output_per_1m: 0.40
+    source: "https://platform.openai.com/docs/pricing/"
+
+  gpt-4.1-mini:
+    input_per_1m: 0.40
+    cached_input_per_1m: 0.10
+    output_per_1m: 1.60
+    source: "https://platform.openai.com/docs/pricing/"
+
+aliases: {}

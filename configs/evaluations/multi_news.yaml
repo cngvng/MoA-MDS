@@ -1,0 +1,32 @@
+run:
+  dataset: "multi_news"
+  split: "test"
+
+evaluation:
+  dataset_name: "multi_news"
+  language: "en"
+  expected_test_samples: 5622
+  primary_metrics:
+    - rouge1_f1
+    - rouge2_f1
+    - rougeL_f1
+  rouge:
+    enabled: true
+    score_type: "f1"
+    report_as_percentage: false
+    use_stemmer: false
+    tokenizer:
+      en: "default"
+  analysis_metrics:
+    kg_metrics:
+      enabled: true
+      metrics:
+        - num_entities
+        - num_relations
+        - num_communities
+        - modularity
+        - contrastive_relation_count
+    runtime_metrics:
+      enabled: true
+    cost_metrics:
+      enabled: true

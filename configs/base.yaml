@@ -1,0 +1,348 @@
+# ============================================================================
+# Base Configuration for Training-Free MoA Framework
+# ============================================================================
+
+project:
+  name: "MoA-MDS"
+  version: "moa_release"
+  task: "multi_document_summarization"
+  framework: "training_free_multi_agent"
+  default_seed: 42
+
+
+# ============================================================================
+# Runtime Configuration
+# ============================================================================
+runtime:
+  seed: ${project.default_seed}
+  deterministic: true
+  num_workers: 8
+
+  # Debug / development options
+  debug: false
+  debug_max_records:
+  dry_run: false
+
+  # Long-run behavior
+  resume: true
+  skip_existing: true
+  continue_on_error: true
+
+  # Output layout is resolved together with configs/storage.yaml
+  output_layout:
+    output_root: "${storage.output_root}"
+    logs_root: "${storage.workspace.logs}"
+    results_root: "${storage.workspace.results}"
+    case_studies_root: "${storage.workspace.case_studies}"
+
+
+# ============================================================================
+# Data Configuration
+# ============================================================================
+data:
+  task: "multi_document_summarization"
+
+  # Dataset-specific absolute paths should be stored in configs/storage.yaml
+  # This base file only defines common schema expectations.
+  schema:
+    sample_id_field: "sample_id"
+    documents_field: "documents"
+    reference_summary_field: "summary"
+
+  supported_datasets:
+    - multi_news
+    - multi_xscience
+    - vn_mds
+    - vims
+
+  default_split: "test"
+
+  preprocessing:
+    normalize_whitespace: true
+    remove_empty_documents: true
+    preserve_document_order: true
+
+  document_constraints:
+    min_num_documents: 1
+    max_num_documents:
+    max_input_tokens:
+    truncate_policy: "none"   # none | head | tail | balanced
+
+
+# ============================================================================
+# LLM Configuration
+# ============================================================================
+llm:
+  provider: "openai_compatible"
+
+  # These values can be overridden in configs/agents/*.yaml
+  model_id: "gpt-5-nano"
+  base_url:
+  api_key_env: "OPENAI_API_KEY"
+
+  generation:
+    temperature:
+    top_p:
+    max_tokens: 512
+    max_tokens_param: "max_completion_tokens"
+    reasoning_effort: "minimal"
+    timeout: 120
+
+  retry:
+    enabled: true
+    max_retries: 3
+    backoff_seconds: 2
+
+  usage_tracking:
+    enabled: true
+    allow_missing_usage: true
+
+  safety:
+    log_api_key: false
+    log_raw_request: false
+
+
+# ============================================================================
+# Agent Configuration
+# ============================================================================
+agents:
+  enabled:
+    extractor: true
+    kgsum: true
+    abstractor: true
+    amf: true
+
+  execution_order:
+    - extractor
+    - kgsum
+    - abstractor
+    - amf
+
+  result_contract:
+    return_output_text: true
+    return_metadata: true
+    return_token_usage: true
+    return_runtime: true
+    return_llm_calls: true
+
+
+# ============================================================================
+# Method Defaults
+# ============================================================================
+method:
+  # Detailed hyperparameters should live in configs/methods/moa.yaml.
+  # This section only defines framework-level defaults.
+
+  extractor:
+    enabled: true
+    output_key: "r_ext"
+    metadata_key: "M_ext"
+    model_name: "lexical_centroid"
+    max_length: 4096
+    lambda: 0.7
+    top_sentence_proportion: 0.15
+    redundancy_threshold: 0.9
+    min_sentences: 3
+    max_sentences: 12
+
+  kgsum:
+    enabled: true
+    output_key: "r_kg"
+    metadata_key: "M_kg"
+    prompt_ids:
+      entity_extraction: "Pi_e"
+      relation_extraction: "Pi_rel"
+      community_summary: "Pi_s"
+      meta_aware_fusion: "Pi_f"
+    spacy_model:
+    entity_similarity_threshold: 0.85
+    relation_confidence_threshold: 0.6
+    community_algorithm: "leiden"
+    top_k_communities: 5
+    min_community_size: 3
+    max_cluster_size: 50
+    leiden_resolution: 1.0
+    max_input_chars: 6000
+    max_summary_tokens: 1024
+
+  abstractor:
+    enabled: true
+    output_key: "r_abs"
+    metadata_key: "M_abs"
+    prompt_ids:
+      initial_generation: "Pi_init"
+      refinement: "Pi_ref"
+    max_refinement_iterations: 2
+    quality_threshold: 0.7
+    max_input_chars: 8000
+    max_summary_tokens: 1024
+    feedback_dimensions:
+      - factual_accuracy
+      - coverage
+      - coherence
+      - specificity
+      - redundancy
+
+  amf:
+    enabled: true
+    output_key: "S_MoA"
+    metadata_key: "M_AMF"
+    prompt_id: "Pi_AMF"
+    dominant_weight_threshold: 0.5
+    dominant_quality_threshold: 0.7
+    max_summary_tokens: 1024
+
+
+# ============================================================================
+# Evaluation Configuration
+# ============================================================================
+evaluation:
+  task: "multi_document_summarization"
+
+  # Main paper metrics
+  primary_metrics:
+    - rouge1_f1
+    - rouge2_f1
+    - rougeL_f1
+
+  rouge:
+    enabled: true
+    score_type: "f1"
+    report_as_percentage: true
+    use_stemmer: false
+
+    tokenizer:
+      en: "default"
+      vi: "vietnamese_aware"
+
+  # Optional analysis metrics for appendix / case studies
+  analysis_metrics:
+    kg_metrics:
+      enabled: true
+      metrics:
+        - num_entities
+        - num_relations
+        - num_communities
+        - modularity
+        - kg_noise_score
+
+    runtime_metrics:
+      enabled: true
+      metrics:
+        - runtime_seconds
+        - avg_runtime_seconds_per_sample
+
+    cost_metrics:
+      enabled: true
+      metrics:
+        - input_tokens
+        - output_tokens
+        - total_tokens
+        - estimated_cost_usd
+        - avg_cost_per_sample
+
+
+# ============================================================================
+# Logging Configuration
+# ============================================================================
+logging:
+  console_level: "INFO"
+  file_level: "INFO"
+  log_to_file: true
+
+  runtime_logger:
+    enabled: true
+    name: "moa_runtime"
+    filename: "runtime.log"
+
+  agent_logger:
+    enabled: true
+    save_case_studies: true
+    save_agent_outputs: true
+    save_agent_metadata: true
+    save_token_usage: true
+    save_runtime: true
+    save_final_summary: true
+    save_reference_summary: true
+
+  error_logging:
+    save_failed_samples: true
+    save_traceback: true
+    failed_samples_file: "failed_samples.jsonl"
+
+  privacy:
+    log_api_key: false
+    log_env_values: false
+    log_full_base_url: true
+
+
+# ============================================================================
+# Output Configuration
+# ============================================================================
+outputs:
+  root_dir: "${storage.output_root}"
+
+  structure:
+    dataset_dir: "outputs/{dataset_name}"
+    case_study_dir: "outputs/{dataset_name}/case_studies/{sample_id}"
+
+  case_study_files:
+    agent_log: "agent_log.json"
+    metadata: "metadata.json"
+    final_summary: "final_summary.txt"
+    reference_summary: "reference_summary.txt"
+    knowledge_graph: "knowledge_graph.json"
+
+  dataset_level_files:
+    metrics: "metrics.json"
+    metadata: "metadata.json"
+
+  overwrite_existing: false
+  save_config_snapshot: true
+
+
+# ============================================================================
+# Cost Configuration
+# ============================================================================
+cost:
+  enabled: true
+  pricing_config: "configs/pricing.yaml"
+
+  currency: "USD"
+
+  token_fields:
+    input_tokens: "input_tokens"
+    output_tokens: "output_tokens"
+    total_tokens: "total_tokens"
+
+  aggregate:
+    per_agent: true
+    per_sample: true
+    per_dataset: true
+
+
+# ============================================================================
+# Run Configuration
+# ============================================================================
+run:
+  mode: "evaluation"   # test | evaluation
+
+  # Can be overridden from CLI or shell script
+  dataset:
+  split: "test"
+  num_samples:
+  sample_ids:
+
+  seed: ${project.default_seed}
+
+  test:
+    default_num_samples: 1
+
+  evaluation:
+    full_dataset: true
+    save_metrics: true
+    save_metadata: true
+
+  scripts:
+    support_nohup: true
+    support_num_samples_override: true

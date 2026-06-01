@@ -63,17 +63,23 @@ PI_S_SYSTEM_PROMPT = (
 
 PI_S_USER_PROMPT = """[Instruction]
 Produce a concise summary of a single knowledge graph community.
+{target_language_instruction}
+
+[Dataset guidance]
+{dataset_guidance}
 
 [Objective]
 The summary must:
 - capture the main theme of the community,
 - mention the most important entities, facts, numbers, and relationships,
 - stay neutral and factual.
+- express only factual content, not graph structure.
 
 Constraints:
 - Do NOT include opinions, speculation, or vague language.
 - Do NOT generalize beyond what is in the input.
 - Do NOT exceed two sentences under any circumstance.
+- Do NOT mention community ids, graph ids, centrality, metadata, or terms like "knowledge graph".
 
 [Input]
 Text: {community_linearized_text}
@@ -91,12 +97,21 @@ PI_F_SYSTEM_PROMPT = (
 
 PI_F_USER_PROMPT = """[Instruction]
 Produce a single cohesive summary by fusing community summaries with metadata.
+{target_language_instruction}
+
+[Dataset guidance]
+{dataset_guidance}
 
 [Objective]
 Given community summaries and metadata including centrality and has_contrasts, produce a 3-5 sentence summary that:
 - emphasizes the most central communities,
 - describes the main facts and relationships across communities,
 - explicitly acknowledges conflicts where has_contrasts is true.
+- converts graph evidence into ordinary news-summary prose.
+
+Constraints:
+- Do NOT mention community ids such as C1/C2/C3.
+- Do NOT mention graph structure, centrality, metadata, or "knowledge graph".
 
 [Input]
 communities:
@@ -114,13 +129,18 @@ PI_INIT_SYSTEM_PROMPT = (
 )
 
 PI_INIT_USER_PROMPT = """[Instruction]
-Write in the same language as the majority of the input documents unless otherwise specified.
+{target_language_instruction}
+
+[Dataset guidance]
+{dataset_guidance}
 
 [Objective]
 Given a document collection D, produce an initial abstractive summary that:
 - captures central topics, key entities, events, and relationships,
 - preserves important numbers, dates, and causal links when salient,
 - is concise but comprehensive enough for later refinement.
+- avoids repeated lead sentences across sources.
+- compresses overlapping articles into one coherent account.
 
 [Input]
 Documents (D):
@@ -138,6 +158,10 @@ PI_REF_SYSTEM_PROMPT = (
 
 PI_REF_USER_PROMPT = """[Instruction]
 Improve the current summary using structured feedback.
+{target_language_instruction}
+
+[Dataset guidance]
+{dataset_guidance}
 
 [Objective]
 Produce an improved summary that:
@@ -150,6 +174,7 @@ Constraints:
 - You MUST follow the requested edits and priorities in the feedback object.
 - You MUST NOT introduce facts that are not present in either the current summary or the feedback object.
 - You MUST output a clean, single summary in natural prose.
+- Remove duplicated sentence openings, partial fragments, labels, and source-navigation wording.
 
 [Input]
 Current Summary: {current_summary_text}
@@ -168,6 +193,7 @@ PI_AMF_SYSTEM_PROMPT = (
 
 PI_AMF_USER_PROMPT = """[Instruction]
 Fuse summaries from Extractor (rext), KGSum (rkg), and Abstractor (rabs) agents into one high-quality summary.
+{target_language_instruction}
 
 [Objective]
 Synthesize a final, integrated summary based on agent summaries and Analysis Metadata (Aanalysis).
@@ -176,6 +202,17 @@ Fusion strategy guidance:
 1. If KG LED: Use rkg as core, augment with rext specifics, use rabs for fluency.
 2. If EXTRACTOR LED: Start with rext, enrich with rkg context, use rabs for flow.
 3. If BALANCED: Weigh contributions by w, ensure key information from high-weight agents.
+4. If the strategy is extractor_anchored: preserve the factual order and wording of rext as the anchor, use rkg only to add missing factual details, and use rabs only for compression and fluency.
+
+Dataset-level guidance:
+{dataset_guidance}
+
+Constraints:
+- Do NOT include labels such as "Tóm tắt tích hợp".
+- Do NOT mention community ids, centrality, metadata, "knowledge graph", or graph structure.
+- Avoid repeated openings and near-duplicate facts from the three agents.
+- Prefer factual precision and source-grounded coverage over broad paraphrase.
+- If dataset guidance says the collection is lead-biased or extractive, preserve source wording for named entities, dates, numbers, and core event phrases.
 
 [Input]
 rext: {rext}

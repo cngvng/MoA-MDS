@@ -5,7 +5,7 @@ run:
 evaluation:
   dataset_name: "multi_news"
   language: "en"
-  expected_test_samples: 5622
+  expected_test_samples: 5621
   primary_metrics:
     - rouge1_f1
     - rouge2_f1
@@ -14,7 +14,7 @@ evaluation:
     enabled: true
     score_type: "f1"
     report_as_percentage: false
-    use_stemmer: false
+    use_stemmer: true
     tokenizer:
       en: "default"
   analysis_metrics:
@@ -30,3 +30,30 @@ evaluation:
       enabled: true
     cost_metrics:
       enabled: true
+
+method:
+  kgsum:
+    max_summary_tokens: 360
+    dataset_guidance: "Multi-News is an English multi-document news summarization dataset. Keep KGSum factual and news-like: focus on event, actors, location, dates, numbers, causes, consequences, and relief/response actions. Do not output entity lists or graph-oriented prose."
+  abstractor:
+    max_summary_tokens: 420
+    max_summary_words: 260
+    dataset_guidance: "Multi-News references are long news summaries. Preserve concrete names, dates, numbers, locations, and event wording from the source articles. Write a coherent inverted-pyramid news summary; avoid generic background and avoid copying raw lists."
+  amf:
+    max_kgsum_weight: 0.10
+    direct_anchor_output: true
+    direct_anchor_policy: "drift_guard"
+    direct_anchor_min_overlap: 0.55
+    dataset_guidance: "Multi-News is an English multi-document news summarization dataset. References are long news summaries that preserve concrete names, dates, numbers, locations, and event wording from the source articles. Use KGSum only as factual cross-checking evidence; do not let graph-style or generic synthesis replace source-grounded news phrasing. Preserve enough detail to match the reference length."
+    max_summary_tokens: 420
+    max_summary_words: 260
+
+calibration:
+  source: "train split"
+  raw_path: "/data/mds/multinews/raw/train.tgt"
+  train_reference_count: 44972
+  train_reference_avg_words: 218.2581
+  train_reference_median_words: 221
+  max_summary_tokens: 420
+  max_summary_tokens_policy: "approximately target words plus decoding headroom; passed as max_completion_tokens"
+  max_summary_words_policy: "rounded train mean plus headroom; no test labels used"

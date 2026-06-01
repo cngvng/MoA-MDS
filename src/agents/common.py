@@ -55,11 +55,13 @@ def documents_from_input(sample_or_documents: Any) -> List[str]:
 def sample_metadata(sample_or_documents: Any) -> Dict[str, Any]:
     if not isinstance(sample_or_documents, Mapping):
         return {}
+    language = sample_or_documents.get("language")
     return {
         "sample_id": sample_or_documents.get("sample_id"),
         "dataset_name": sample_or_documents.get("dataset_name"),
         "split": sample_or_documents.get("split"),
-        "language": sample_or_documents.get("language"),
+        "language": language,
+        "target_language": language,
     }
 
 
@@ -80,8 +82,164 @@ def split_sentences(text: str) -> List[str]:
     return sentences
 
 
+KG_SURFACE_MARKERS = (
+    "cộng đồng",
+    "knowledge graph",
+    "đồ thị tri thức",
+    "centrality",
+    "metadata",
+    "mức độ liên kết",
+    "cấu trúc trung tâm",
+    "mối liên hệ",
+    "thực thể",
+    "các nhóm",
+    "liên kết chặt chẽ",
+    "quan hệ giữa",
+    "community",
+)
+
+
+def clean_summary_surface(text: str, *, remove_kg_markers: bool = True) -> str:
+    normalized = normalize_whitespace(text)
+    normalized = re.sub(r"^(tóm tắt tích hợp|bản tóm tắt|tổng hợp)\s*:\s*", "", normalized, flags=re.IGNORECASE)
+    sentences = split_sentences(normalized)
+    cleaned: List[str] = []
+    seen = set()
+    for sentence in sentences:
+        candidate = sentence.strip()
+        if not candidate:
+            continue
+        lowered = candidate.lower()
+        if remove_kg_markers and any(marker in lowered for marker in KG_SURFACE_MARKERS):
+            continue
+        if re.fullmatch(r"[\wÀ-ỹ]{1,3}\.", candidate, flags=re.UNICODE):
+            continue
+        key = " ".join(tokenize(candidate)[:18])
+        if key and key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(candidate)
+    if cleaned:
+        return normalize_whitespace(" ".join(cleaned))
+    if remove_kg_markers and sentences:
+        return ""
+    return normalized
+
+
+def repetition_ratio(text: str) -> float:
+    tokens = tokenize(text)
+    if not tokens:
+        return 0.0
+    return round(1.0 - (len(set(tokens)) / len(tokens)), 6)
+
+
 def tokenize(text: str) -> List[str]:
     return re.findall(r"[\wÀ-ỹ]+", text.lower(), flags=re.UNICODE)
+
+
+VIETNAMESE_DIACRITICS = set(
+    "ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệ"
+    "íìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ"
+)
+VIETNAMESE_STOPWORDS = {
+    "và",
+    "của",
+    "là",
+    "các",
+    "những",
+    "trong",
+    "được",
+    "cho",
+    "với",
+    "một",
+    "này",
+    "đã",
+    "khi",
+    "tại",
+    "theo",
+    "từ",
+    "về",
+    "có",
+    "không",
+    "người",
+    "năm",
+}
+ENGLISH_STOPWORDS = {
+    "the",
+    "and",
+    "of",
+    "to",
+    "in",
+    "for",
+    "with",
+    "on",
+    "as",
+    "by",
+    "that",
+    "is",
+    "are",
+    "was",
+    "were",
+    "from",
+    "this",
+    "these",
+}
+
+
+def language_from_input(sample_or_documents: Any, default: str = "en") -> str:
+    if isinstance(sample_or_documents, Mapping):
+        return str(sample_or_documents.get("language") or default).lower()
+    return default
+
+
+def language_name(language: str) -> str:
+    normalized = (language or "en").lower()
+    if normalized == "vi":
+        return "Vietnamese"
+    if normalized == "en":
+        return "English"
+    return normalized
+
+
+def language_instruction(language: str) -> str:
+    name = language_name(language)
+    if (language or "").lower() == "vi":
+        return (
+            "Target language: Vietnamese (vi). You MUST write the entire output in Vietnamese. "
+            "Do not translate Vietnamese source content into English. Keep Vietnamese names and terms as written."
+        )
+    return f"Target language: {name}. Write the entire output in {name}."
+
+
+def language_retry_instruction(language: str) -> str:
+    return (
+        "\n\n[Mandatory Language Correction]\n"
+        f"The previous answer violated the target language contract. {language_instruction(language)} "
+        "Rewrite the answer completely in the target language, preserving the same factual content."
+    )
+
+
+def is_language_mismatch(text: str, target_language: Optional[str]) -> bool:
+    if (target_language or "").lower() != "vi":
+        return False
+
+    normalized = normalize_whitespace(text)
+    if not normalized:
+        return False
+
+    tokens = tokenize(normalized)
+    if len(tokens) < 6:
+        return False
+
+    lower_text = normalized.lower()
+    diacritic_count = sum(1 for char in lower_text if char in VIETNAMESE_DIACRITICS)
+    vi_stopword_count = sum(1 for token in tokens if token in VIETNAMESE_STOPWORDS)
+    en_stopword_count = sum(1 for token in tokens if token in ENGLISH_STOPWORDS)
+    token_count = max(len(tokens), 1)
+
+    has_vietnamese_signal = diacritic_count >= 8 or (vi_stopword_count / token_count) >= 0.035
+    has_english_signal = (en_stopword_count / token_count) >= 0.09 and diacritic_count < 8
+    return has_english_signal or not has_vietnamese_signal
 
 
 def vectorize(text: str) -> Counter:
@@ -211,6 +369,30 @@ def truncate_documents(documents: List[str], max_chars: int) -> str:
         chunks.append(prefix + body)
         remaining -= len(prefix) + len(body)
     return "\n\n".join(chunks)
+
+
+def trim_to_word_budget(text: str, max_words: Optional[int]) -> str:
+    if max_words is None or max_words <= 0:
+        return normalize_whitespace(text)
+
+    sentences = split_sentences(text)
+    selected: List[str] = []
+    used_words = 0
+
+    for sentence in sentences:
+        sentence_words = sentence.split()
+        if not sentence_words:
+            continue
+        if selected and used_words + len(sentence_words) > max_words:
+            break
+        if not selected and len(sentence_words) > max_words:
+            return " ".join(sentence_words[:max_words])
+        selected.append(sentence)
+        used_words += len(sentence_words)
+
+    if selected:
+        return normalize_whitespace(" ".join(selected))
+    return " ".join(normalize_whitespace(text).split()[:max_words])
 
 
 def _optional_int(value: Any) -> Optional[int]:

@@ -15,8 +15,9 @@ evaluation:
     score_type: "f1"
     report_as_percentage: false
     use_stemmer: false
+    multi_reference_aggregation: "max"
     tokenizer:
-      vi: "vietnamese_aware"
+      vi: "unicode_char"
   analysis_metrics:
     kg_metrics:
       enabled: true
@@ -30,3 +31,31 @@ evaluation:
       enabled: true
     cost_metrics:
       enabled: true
+
+method:
+  kgsum:
+    max_summary_tokens: 300
+  abstractor:
+    max_summary_tokens: 300
+    max_summary_words: 180
+  amf:
+    force_extractor_anchor: true
+    max_kgsum_weight: 0.10
+    direct_anchor_output: true
+    direct_anchor_policy: "always"
+    direct_anchor_min_overlap: 0.62
+    dataset_guidance: "VN-MDS is a Vietnamese multi-document news summarization dataset with extractive reference style. Preserve Vietnamese source wording for named entities, dates, numbers, locations, and core event phrases. Use KGSum only as a factual checklist; do not let graph-oriented phrasing dominate the final prose."
+    extractor_anchor_threshold: 0.45
+    max_summary_tokens: 300
+    max_summary_words: 180
+
+calibration:
+  source: "non-test raw clusters after configured test selection"
+  raw_path: "/data/mds/vnmds/raw/extracted/clusters"
+  calibration_cluster_count: 170
+  calibration_reference_count: 680
+  calibration_reference_avg_words: 168.4162
+  calibration_reference_median_words: 157
+  max_summary_tokens: 300
+  max_summary_tokens_policy: "approximately target words plus decoding headroom; passed as max_completion_tokens"
+  max_summary_words_policy: "rounded non-test calibration mean plus headroom; configured test clusters excluded"

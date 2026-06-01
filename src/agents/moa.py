@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
 
 from src.agents.abstractor import AbstractorAgent
 from src.agents.amf import AMFFusion
@@ -26,7 +26,7 @@ class MixtureOfAgents:
         self.kgsum = KGSumAgent(self.llm, config)
         self.abstractor = AbstractorAgent(self.llm, config)
         self.amf = AMFFusion(self.llm, config)
-        self.rouge = RougeMetric(use_stemmer=config.get("evaluation.rouge.use_stemmer", False))
+        self.default_language = config.get("evaluation.language")
 
     def process_sample(
         self,
@@ -36,14 +36,24 @@ class MixtureOfAgents:
         sample_id_suffix: str = "",
     ) -> Dict[str, Any]:
         results: Dict[str, Dict[str, Any]] = {}
+        language = str(sample.get("language") or self.default_language or "en")
         results["extractor"] = self.extractor.process(sample)
         results["kgsum"] = self.kgsum.process(sample)
         results["abstractor"] = self.abstractor.process(sample)
-        results["amf"] = self.amf.process(results)
+        results["amf"] = self.amf.process(results, target_language=language)
 
         final_summary = results["amf"]["output_text"]
         reference_summary = str(sample.get("reference_summary", ""))
-        metrics = self.rouge.calculate(final_summary, reference_summary) if reference_summary else {}
+        reference_summaries = self._reference_summaries(sample)
+        metrics = (
+            self._rouge_for_sample(sample).calculate_multi_reference(
+                final_summary,
+                reference_summaries,
+                aggregation=str(self.config.get("evaluation.rouge.multi_reference_aggregation", "max")),
+            )
+            if reference_summaries
+            else {}
+        )
         artifact_paths: Dict[str, str] = {}
 
         if write_case_study:
@@ -52,6 +62,7 @@ class MixtureOfAgents:
                 results=results,
                 final_summary=final_summary,
                 reference_summary=reference_summary,
+                reference_summaries=reference_summaries,
                 metrics=metrics,
                 sample_id_suffix=sample_id_suffix,
             )
@@ -61,10 +72,20 @@ class MixtureOfAgents:
             "dataset_name": sample.get("dataset_name"),
             "final_summary": final_summary,
             "reference_summary": reference_summary,
+            "reference_summaries": reference_summaries,
             "agents": results,
             "metrics": metrics,
             "artifact_paths": artifact_paths,
         }
+
+    def _rouge_for_sample(self, sample: Mapping[str, Any]) -> RougeMetric:
+        language = str(sample.get("language") or self.default_language or "en")
+        tokenizer_name = self.config.get(f"evaluation.rouge.tokenizer.{language}", "default")
+        return RougeMetric(
+            use_stemmer=self.config.get("evaluation.rouge.use_stemmer", False),
+            tokenizer_name=tokenizer_name,
+            language=language,
+        )
 
     def _write_case_study(
         self,
@@ -73,6 +94,7 @@ class MixtureOfAgents:
         results: Mapping[str, Dict[str, Any]],
         final_summary: str,
         reference_summary: str,
+        reference_summaries: List[str],
         metrics: Dict[str, Any],
         sample_id_suffix: str,
     ) -> Dict[str, str]:
@@ -95,6 +117,7 @@ class MixtureOfAgents:
         logger.finalize_sample(
             final_summary=final_summary,
             reference_summary=reference_summary,
+            reference_summaries=reference_summaries,
             sample_metrics=metrics,
             status="completed",
         )
@@ -124,3 +147,13 @@ class MixtureOfAgents:
             "fact_density": kg_metadata.get("fact_density"),
             "params": kg_metadata.get("params", {}),
         }
+
+    @staticmethod
+    def _reference_summaries(sample: Mapping[str, Any]) -> List[str]:
+        metadata = sample.get("metadata", {})
+        values = metadata.get("reference_summaries") if isinstance(metadata, Mapping) else None
+        references = [str(value).strip() for value in values or [] if str(value).strip()]
+        primary = str(sample.get("reference_summary", "")).strip()
+        if primary and primary not in references:
+            references.insert(0, primary)
+        return references

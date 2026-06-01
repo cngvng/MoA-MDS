@@ -14,7 +14,7 @@ evaluation:
     enabled: true
     score_type: "f1"
     report_as_percentage: false
-    use_stemmer: false
+    use_stemmer: true
     tokenizer:
       en: "default"
   analysis_metrics:
@@ -30,3 +30,30 @@ evaluation:
       enabled: true
     cost_metrics:
       enabled: true
+
+method:
+  kgsum:
+    max_summary_tokens: 180
+    dataset_guidance: "Multi-XScience is an English scientific related-work summarization dataset. Document 1 is the target paper abstract; following documents are cited paper abstracts. Keep KGSum factual and concise: focus on task names, method names, datasets, comparison or contrast claims, and how each cited paper relates to the target paper. Avoid broad survey-style generic summaries."
+  abstractor:
+    max_summary_tokens: 220
+    max_summary_words: 125
+    dataset_guidance: "Multi-XScience references are concise related-work paragraphs. Document 1 is the target paper abstract; following documents are cited paper abstracts. Preserve task names, method names, datasets, citations' technical roles, and comparison wording. Write how prior/cited work relates to the target paper, not a generic survey and not only a target-paper abstract. Prefer one compact paragraph."
+  amf:
+    max_kgsum_weight: 0.08
+    direct_anchor_output: true
+    direct_anchor_policy: "drift_guard"
+    direct_anchor_min_overlap: 0.55
+    dataset_guidance: "Multi-XScience is an English scientific related-work summarization dataset. Document 1 is the target paper abstract; following documents are cited paper abstracts. References are concise related-work paragraphs that compare the target paper with cited papers. Preserve task names, method names, datasets, and contrast/comparison wording. Write how the cited work relates to the target paper; do not write a generic survey or only summarize the target paper. Use KGSum only as factual cross-checking evidence."
+    max_summary_tokens: 220
+    max_summary_words: 125
+
+calibration:
+  source: "train split"
+  raw_path: "/data/mds/multixscience/raw/train.json"
+  train_reference_count: 30369
+  train_reference_avg_words: 105.891
+  train_reference_median_words: 102
+  max_summary_tokens: 220
+  max_summary_tokens_policy: "approximately target words plus decoding headroom; passed as max_completion_tokens"
+  max_summary_words_policy: "rounded train mean plus headroom; no test labels used"

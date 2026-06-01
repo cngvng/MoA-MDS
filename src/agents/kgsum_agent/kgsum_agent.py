@@ -6,6 +6,7 @@ from src.agents.common import (
     documents_from_input,
     elapsed,
     get_method_config,
+    language_from_input,
     make_agent_output,
     sample_metadata,
     sum_token_usage,
@@ -38,6 +39,7 @@ class KGSumAgent:
         self.max_input_chars = int(method.get("max_input_chars", 6000))
         self.max_summary_tokens = int(method.get("max_summary_tokens", 1024))
         self.spacy_model = method.get("spacy_model")
+        self.dataset_guidance = str(method.get("dataset_guidance", "") or "").strip()
 
         self.entity_extractor = HybridEntityExtractor(
             llm=llm,
@@ -59,16 +61,21 @@ class KGSumAgent:
         self.summary_generator = MetaAwareSummaryGenerator(
             llm=llm,
             max_summary_tokens=self.max_summary_tokens,
+            dataset_guidance=self.dataset_guidance,
         )
 
     def process(self, sample_or_documents: Any) -> Dict[str, Any]:
         start = timed()
         documents = documents_from_input(sample_or_documents)
+        target_language = language_from_input(sample_or_documents)
 
         entities, entity_calls = self.entity_extractor.extract_entities(documents)
         relations, relation_calls = self.relation_extractor.extract_relations(documents, entities)
         graph, communities = self.community_detector.detect_communities(entities, relations)
-        output_text, community_summaries, summary_calls = self.summary_generator.generate_summary(communities)
+        output_text, community_summaries, summary_calls = self.summary_generator.generate_summary(
+            communities,
+            target_language=target_language,
+        )
 
         llm_calls = [*entity_calls, *relation_calls, *summary_calls]
         graph_metrics = self.community_detector.graph_metrics(graph, communities, relations)
@@ -99,6 +106,8 @@ class KGSumAgent:
                     "max_cluster_size": self.max_cluster_size,
                     "leiden_resolution": self.leiden_resolution,
                     "spacy_model": self.spacy_model,
+                    "target_language": target_language,
+                    "dataset_guidance": self.dataset_guidance,
                 },
             },
             "output_key": self.output_key,

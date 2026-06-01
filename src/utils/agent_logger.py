@@ -458,6 +458,7 @@ class AgentLogger:
         self,
         final_summary: Optional[str] = None,
         reference_summary: Optional[str] = None,
+        reference_summaries: Optional[list[str]] = None,
         sample_metrics: Optional[JsonDict] = None,
         status: str = "completed",
     ) -> None:
@@ -472,6 +473,13 @@ class AgentLogger:
             if reference_summary is not None:
                 self.agent_log["reference_summary"] = reference_summary
                 atomic_write_text(self.reference_summary_path, reference_summary)
+
+            if reference_summaries is not None:
+                self.agent_log["reference_summaries"] = reference_summaries
+                self.metadata["reference_count"] = len(reference_summaries)
+                self.metadata["reference_aggregation"] = (
+                    sample_metrics or {}
+                ).get("reference_aggregation")
 
             if sample_metrics is not None:
                 self.agent_log["sample_metrics"] = sanitize_for_logging(sample_metrics)

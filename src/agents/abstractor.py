@@ -6,15 +6,22 @@ from typing import Any, Dict, List
 
 from src.agents.common import (
     call_llm,
+    clean_summary_surface,
     documents_from_input,
     elapsed,
     get_method_config,
+    is_language_mismatch,
+    language_from_input,
+    language_instruction,
+    language_retry_instruction,
     make_agent_output,
     normalize_whitespace,
+    repetition_ratio,
     sample_metadata,
     sum_token_usage,
     timed,
     tokenize,
+    trim_to_word_budget,
     truncate_documents,
 )
 from src.agents.prompts import PI_INIT_SYSTEM_PROMPT, PI_INIT_USER_PROMPT, PI_REF_SYSTEM_PROMPT, PI_REF_USER_PROMPT
@@ -54,16 +61,23 @@ class AbstractorAgent:
         self.quality_threshold = float(method.get("quality_threshold", 0.7))
         self.max_input_chars = int(method.get("max_input_chars", 8000))
         self.max_summary_tokens = int(method.get("max_summary_tokens", 512))
+        self.max_summary_words = method.get("max_summary_words")
+        self.max_summary_words = int(self.max_summary_words) if self.max_summary_words else None
+        self.dataset_guidance = str(method.get("dataset_guidance", "") or "").strip()
 
     def process(self, sample_or_documents: Any) -> Dict[str, Any]:
         start = timed()
         documents = documents_from_input(sample_or_documents)
+        target_language = language_from_input(sample_or_documents)
         llm_calls: List[Dict[str, Any]] = []
 
-        initial_summary, initial_call = self._generate_initial_summary(documents)
-        llm_calls.append(initial_call)
+        initial_summary, initial_calls = self._generate_initial_summary(documents, target_language)
+        llm_calls.extend(initial_calls)
 
-        current_summary = normalize_whitespace(initial_summary) or self._fallback_initial_summary(documents)
+        current_summary = trim_to_word_budget(
+            clean_summary_surface(initial_summary, remove_kg_markers=False) or self._fallback_initial_summary(documents),
+            self.max_summary_words,
+        )
         feedback_history: List[Dict[str, Any]] = []
         refined_summaries: List[str] = []
 
@@ -83,9 +97,13 @@ class AbstractorAgent:
                 feedback=feedback,
                 documents=documents,
                 iteration=iteration,
+                target_language=target_language,
             )
-            llm_calls.append(refine_call)
-            current_summary = normalize_whitespace(refined_summary) or current_summary
+            llm_calls.extend(refine_call)
+            current_summary = trim_to_word_budget(
+                clean_summary_surface(refined_summary, remove_kg_markers=False) or current_summary,
+                self.max_summary_words,
+            )
             refined_summaries.append(current_summary)
 
         final_feedback = self._evaluate_mds_quality(current_summary, documents)
@@ -107,6 +125,9 @@ class AbstractorAgent:
                 "params": {
                     "max_refinement_iterations": self.max_refinement_iterations,
                     "quality_threshold": self.quality_threshold,
+                    "max_summary_words": self.max_summary_words,
+                    "target_language": target_language,
+                    "dataset_guidance": self.dataset_guidance,
                 },
             },
             "output_key": self.output_key,
@@ -122,16 +143,31 @@ class AbstractorAgent:
             token_usage=sum_token_usage([call["usage"] for call in llm_calls]),
         )
 
-    def _generate_initial_summary(self, documents: List[str]) -> tuple[str, Dict[str, Any]]:
-        return call_llm(
+    def _generate_initial_summary(self, documents: List[str], target_language: str) -> tuple[str, List[Dict[str, Any]]]:
+        user_prompt = PI_INIT_USER_PROMPT.format(
+            documents=truncate_documents(documents, self.max_input_chars)
+            + _length_instruction(self.max_summary_words),
+            target_language_instruction=language_instruction(target_language),
+            dataset_guidance=_dataset_guidance_instruction(self.dataset_guidance),
+        )
+        text, call = call_llm(
             self.llm,
             prompt_id="Pi_init",
             system_prompt=PI_INIT_SYSTEM_PROMPT,
-            user_prompt=PI_INIT_USER_PROMPT.format(
-                documents=truncate_documents(documents, self.max_input_chars)
-            ),
+            user_prompt=user_prompt,
             max_tokens=self.max_summary_tokens,
         )
+        calls = [call]
+        if is_language_mismatch(text, target_language):
+            text, retry_call = call_llm(
+                self.llm,
+                prompt_id="Pi_init_language_retry",
+                system_prompt=PI_INIT_SYSTEM_PROMPT,
+                user_prompt=user_prompt + language_retry_instruction(target_language),
+                max_tokens=self.max_summary_tokens,
+            )
+            calls.append(retry_call)
+        return text, calls
 
     @staticmethod
     def _fallback_initial_summary(documents: List[str]) -> str:
@@ -151,24 +187,49 @@ class AbstractorAgent:
         feedback: MDSFeedback,
         documents: List[str],
         iteration: int,
-    ) -> tuple[str, Dict[str, Any]]:
-        return call_llm(
+        target_language: str,
+    ) -> tuple[str, List[Dict[str, Any]]]:
+        user_prompt = PI_REF_USER_PROMPT.format(
+            current_summary_text=current_summary,
+            feedback_object_from_FMDS=json.dumps(
+                {
+                    "iteration": iteration,
+                    "feedback": feedback.__dict__,
+                    "surface_constraints": {
+                        "remove_duplicate_openings": True,
+                        "remove_partial_sentence_fragments": True,
+                        "rewrite_as_coherent_summary": True,
+                    },
+                    "length_constraint": {
+                        "max_summary_words": self.max_summary_words,
+                    },
+                    "target_language": target_language,
+                    "dataset_guidance": self.dataset_guidance,
+                    "source_documents": truncate_documents(documents, self.max_input_chars),
+                },
+                ensure_ascii=False,
+            ),
+            target_language_instruction=language_instruction(target_language),
+            dataset_guidance=_dataset_guidance_instruction(self.dataset_guidance),
+        )
+        text, call = call_llm(
             self.llm,
             prompt_id="Pi_ref",
             system_prompt=PI_REF_SYSTEM_PROMPT,
-            user_prompt=PI_REF_USER_PROMPT.format(
-                current_summary_text=current_summary,
-                feedback_object_from_FMDS=json.dumps(
-                    {
-                        "iteration": iteration,
-                        "feedback": feedback.__dict__,
-                        "source_documents": truncate_documents(documents, self.max_input_chars),
-                    },
-                    ensure_ascii=False,
-                ),
-            ),
+            user_prompt=user_prompt,
             max_tokens=self.max_summary_tokens,
         )
+        calls = [call]
+        if is_language_mismatch(text, target_language):
+            text, retry_call = call_llm(
+                self.llm,
+                prompt_id="Pi_ref_language_retry",
+                system_prompt=PI_REF_SYSTEM_PROMPT,
+                user_prompt=user_prompt + language_retry_instruction(target_language),
+                max_tokens=self.max_summary_tokens,
+            )
+            calls.append(retry_call)
+        return text, calls
 
     def _evaluate_mds_quality(self, summary: str, documents: List[str]) -> MDSFeedback:
         source_tokens = set()
@@ -183,13 +244,14 @@ class AbstractorAgent:
         coherence = _coherence_score(summary)
         specificity = _specificity_score(summary)
         redundancy = _redundancy_score(summary_tokens)
+        repetition = repetition_ratio(summary)
 
         return MDSFeedback(
             factual_accuracy=round(min(1.0, factual_accuracy), 6),
             coverage=round(min(1.0, coverage * 2.5), 6),
             coherence=coherence,
             specificity=specificity,
-            redundancy=redundancy,
+            redundancy=round(max(redundancy, repetition), 6),
         )
 
 
@@ -219,3 +281,13 @@ def _redundancy_score(tokens: List[str]) -> float:
         return 0.0
     unique_ratio = len(set(tokens)) / len(tokens)
     return round(1.0 - unique_ratio, 6)
+
+
+def _length_instruction(max_summary_words: int | None) -> str:
+    if not max_summary_words:
+        return ""
+    return f"\n\nLength constraint: the summary must not exceed {max_summary_words} words."
+
+
+def _dataset_guidance_instruction(dataset_guidance: str) -> str:
+    return dataset_guidance or "No additional dataset-level guidance."

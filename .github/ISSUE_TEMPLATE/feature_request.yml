@@ -1,0 +1,16 @@
+name: Feature or maintenance request
+description: Propose an improvement to reproducibility, compatibility, or contributor experience.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and validation
+      description: Describe the change, alternatives, and how it could be checked.
+    validations:
+      required: true

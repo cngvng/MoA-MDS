@@ -1,0 +1,28 @@
+name: Bug report
+description: Report a reproducible problem in code, configuration, or documentation.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Commit, OS, Python version, dataset, and model/backend (if applicable).
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact command and a minimal synthetic input. Remove API keys and private data.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs or traceback
+      render: text

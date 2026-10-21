@@ -123,6 +123,10 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
+.DS_Store
+llm_outputs/
 .venv
 env/
 venv/

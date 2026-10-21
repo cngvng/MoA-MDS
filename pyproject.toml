@@ -1,9 +1,13 @@
 [project]
 name = "moa"
 version = "0.1.0"
-description = "Add your description here"
+description = "Training-free multi-document summarization with a mixture of LLM and knowledge-graph agents"
 readme = "README.md"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Tuan-Cuong Vuong" }]
+keywords = ["multi-document-summarization", "mixture-of-agents", "knowledge-graphs", "nlp", "reproducibility"]
 dependencies = [
     "datasets>=4.8.5",
     "igraph>=1.0.0",
@@ -13,8 +17,22 @@ dependencies = [
     "networkx>=3.4.2",
     "openai>=2.38.0",
     "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.2",
     "rouge-score>=0.1.2",
     "scikit-learn>=1.7.2",
     "spacy>=3.8.14",
     "transformers>=5.9.0",
 ]
+
+[project.urls]
+Repository = "https://github.com/cngvng/MoA-MDS"
+Issues = "https://github.com/cngvng/MoA-MDS/issues"
+Paper = "https://doi.org/10.1007/s00521-026-12249-y"
+Homepage = "https://vnpt-ai-official.github.io/NCA2026-MoA-MDS/"
+
+[dependency-groups]
+dev = ["pytest>=8.3,<10", "pytest-socket>=0.7,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--disable-socket -ra"

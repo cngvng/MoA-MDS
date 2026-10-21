@@ -1,0 +1,32 @@
+cff-version: 1.2.0
+message: "If you use MoA-MDS, please cite the accompanying paper."
+title: "MoA-MDS: Training-Free Mixture-of-Agents for Multi-Document Summarization"
+type: software
+version: 0.1.0
+license: MIT
+repository-code: "https://github.com/cngvng/MoA-MDS"
+url: "https://vnpt-ai-official.github.io/NCA2026-MoA-MDS/"
+authors:
+  - family-names: Vuong
+    given-names: Tuan-Cuong
+preferred-citation:
+  type: article
+  title: "A training-free mixture-of-agents framework for multi-document summarization using LLMs and knowledge graphs"
+  authors:
+    - family-names: Tuan
+      given-names: Cuong Vuong
+    - family-names: Xuan
+      given-names: Trang Mai
+    - family-names: Nguyen
+      given-names: Tien-Cuong
+    - family-names: Ngo
+      given-names: Vu-Duc
+    - family-names: Luong
+      given-names: Thien Van
+  journal: Neural Computing and Applications
+  volume: "38"
+  start: "538"
+  year: 2026
+  month: 6
+  doi: "10.1007/s00521-026-12249-y"
+  url: "https://doi.org/10.1007/s00521-026-12249-y"
